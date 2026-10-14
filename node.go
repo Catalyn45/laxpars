@@ -1,4 +1,4 @@
-package main
+package laxpars
 
 import (
 	"fmt"
@@ -24,7 +24,7 @@ type Node struct {
 	Parent     *Node
 }
 
-func newTextNode(text string) *Node {
+func NewTextNode(text string) *Node {
 	return &Node{
 		Type:  NODE_TYPE_TEXT,
 		Value: text,

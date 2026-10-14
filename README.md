@@ -87,7 +87,7 @@ func main() {
 	el := root.GetElementById("id123")
 
 	el.AppendChild(&laxpars.Node {
-		Type: NODE_TYPE_ELEMENT,
+		Type: laxpars.NODE_TYPE_ELEMENT,
 		Value: "p",
 		Children: []*laxpars.Node { laxpars.NewTextNode("Hello") },
 	})

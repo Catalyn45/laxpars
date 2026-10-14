@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"github.com/Catalyn45/laxpars"
 	"os"
 )
 
@@ -19,8 +20,7 @@ func main() {
 		return
 	}
 
-	lexer := NewLexer(resp.Body)
-	parser := NewParser(lexer)
+	parser := laxpars.NewParser(resp.Body)
 
 	root := parser.Parse()
 

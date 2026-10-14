@@ -1,7 +1,8 @@
-package main
+package laxpars
 
 import (
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 )
@@ -18,9 +19,9 @@ type Parser struct {
 	Root *Node
 }
 
-func NewParser(lexer *Lexer) *Parser {
-	return &Parser{
-		lexer: lexer,
+func NewParser(input io.Reader) *Parser {
+	return &Parser {
+		lexer: NewLexer(input),
 	}
 }
 
@@ -28,7 +29,7 @@ func (this *Parser) SetVisitor(nodeVisitor NodeVisitor) {
 	this.nodeVisitor = nodeVisitor
 }
 
-func (this *Parser) Next() {
+func (this *Parser) next() {
 	this.current = this.lexer.Next()
 }
 
@@ -39,7 +40,7 @@ func (this *Parser) consume(tokenType string) string {
 
 	token := this.current
 
-	this.Next()
+	this.next()
 
 	return token.Value
 }
@@ -69,14 +70,14 @@ func (this *Parser) parseStartTag() *Node {
 
 		attributeValue := ""
 		if this.current.Type == TOKEN_TYPE_EQUAL {
-			this.Next()
+			this.next()
 
 			if this.current.Type != TOKEN_TYPE_STRING && this.current.Type != TOKEN_TYPE_NAME {
 				panic(fmt.Errorf("string or name expected for attribute value"))
 			}
 
 			attributeValue = this.current.Value
-			this.Next()
+			this.next()
 		}
 
 		node.Attributes[attributeName] = attributeValue
@@ -161,7 +162,7 @@ func (this *Parser) parseElement() *Node {
 	if this.isRawTextTag(tag.Value) {
 		text := this.lexer.GetRawText(tag.Value)
 		if text != "" {
-			tag.AppendChild(newTextNode(text))
+			tag.AppendChild(NewTextNode(text))
 		}
 
 		return tag
@@ -170,9 +171,9 @@ func (this *Parser) parseElement() *Node {
 	for {
 		text := this.lexer.GetText()
 		if text != "" {
-			tag.AppendChild(newTextNode(text))
+			tag.AppendChild(NewTextNode(text))
 		}
-		this.Next()
+		this.next()
 
 		if this.current.Type != TOKEN_TYPE_START_TAG_OPEN && this.current.Type != TOKEN_TYPE_COMMENT {
 			break
@@ -192,13 +193,13 @@ func (this *Parser) Parse() *Node {
 		return this.Root
 	}
 
-	this.Next()
+	this.next()
 
 	root := Node {
 		Type: NODE_TYPE_ROOT,
 	}
 
-	for ; this.current.Type == TOKEN_TYPE_COMMENT; this.Next() {
+	for ; this.current.Type == TOKEN_TYPE_COMMENT; this.next() {
 		root.AppendChild(&Node {
 			Type: NODE_TYPE_COMMENT,
 			Value: this.current.Value,
@@ -211,10 +212,10 @@ func (this *Parser) Parse() *Node {
 			Value: strings.ToLower(this.current.Value),
 		})
 
-		this.Next()
+		this.next()
 	}
 
-	for ; this.current.Type != TOKEN_TYPE_EOF; this.Next() {
+	for ; this.current.Type != TOKEN_TYPE_EOF; this.next() {
 		element := this.parseElement()
 		root.AppendChild(element)
 	}
