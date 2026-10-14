@@ -3,13 +3,19 @@ package main
 import (
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 )
+
+type NodeVisitor interface {
+	VisitNode(node *Node)
+}
 
 type Parser struct {
 	lexer   *Lexer
 	current *Token
+	nodeVisitor NodeVisitor
+
+	Root *Node
 }
 
 func NewParser(lexer *Lexer) *Parser {
@@ -18,9 +24,12 @@ func NewParser(lexer *Lexer) *Parser {
 	}
 }
 
+func (this *Parser) SetVisitor(nodeVisitor NodeVisitor) {
+	this.nodeVisitor = nodeVisitor
+}
+
 func (this *Parser) Next() {
 	this.current = this.lexer.Next()
-	fmt.Println("current token: ", this.current)
 }
 
 func (this *Parser) consume(tokenType string) string {
@@ -128,6 +137,12 @@ func (this *Parser) isRawTextTag(tag string) bool {
 	return false
 }
 
+func (this *Parser) visitNode(node *Node) {
+	if this.nodeVisitor != nil {
+		this.nodeVisitor.VisitNode(node)
+	}
+}
+
 func (this *Parser) parseElement() *Node {
 	if this.current.Type == TOKEN_TYPE_COMMENT {
 		return &Node{
@@ -137,6 +152,8 @@ func (this *Parser) parseElement() *Node {
 	}
 
 	tag := this.parseStartTag()
+	defer this.visitNode(tag)
+
 	if isVoidTag(tag.Value) {
 		return tag
 	}
@@ -144,7 +161,7 @@ func (this *Parser) parseElement() *Node {
 	if this.isRawTextTag(tag.Value) {
 		text := this.lexer.GetRawText(tag.Value)
 		if text != "" {
-			tag.AddChild(newTextNode(text))
+			tag.AppendChild(newTextNode(text))
 		}
 
 		return tag
@@ -153,7 +170,7 @@ func (this *Parser) parseElement() *Node {
 	for {
 		text := this.lexer.GetText()
 		if text != "" {
-			tag.AddChild(newTextNode(text))
+			tag.AppendChild(newTextNode(text))
 		}
 		this.Next()
 
@@ -162,7 +179,7 @@ func (this *Parser) parseElement() *Node {
 		}
 
 		child := this.parseElement()
-		tag.AddChild(child)
+		tag.AppendChild(child)
 	}
 
 	this.parseEndTag(tag.Value)
@@ -170,101 +187,26 @@ func (this *Parser) parseElement() *Node {
 	return tag
 }
 
-const (
-	NODE_TYPE_ROOT = "ROOT"
-	NODE_TYPE_ELEMENT = "ELEMENT"
-	NODE_TYPE_TEXT = "TEXT"
-	NODE_TYPE_COMMENT = "COMMENT"
-	NODE_TYPE_DECLARATION = "DECLARATION"
-)
-
-type Node struct {
-	Type string
-	Value string
-	Attributes map[string]string
-	Children []*Node
-	Parent *Node
-}
-
-func newTextNode(text string) *Node {
-	return &Node {
-		Type: NODE_TYPE_TEXT,
-		Value: text,
-	}
-}
-
-func (this *Node) AddChild(child *Node) {
-	this.Children = append(this.Children, child)
-	child.Parent = this
-}
-
-func (this *Node) ToHtml() string {
-	if this.Type == NODE_TYPE_TEXT {
-		return this.Value
+func (this *Parser) Parse() *Node {
+	if this.Root != nil {
+		return this.Root
 	}
 
-	if this.Type == NODE_TYPE_COMMENT {
-		return "<!--" + this.Value + "-->"
-	}
-
-	if this.Type == NODE_TYPE_DECLARATION {
-		return "<!" + this.Value + ">"
-	}
-
-	repr := ""
-	if this.Type == NODE_TYPE_ELEMENT {
-		repr += "<" + this.Value;
-
-		for name, value := range this.Attributes {
-			repr += " " + name
-
-			if value != "" {
-				repr += "=" + value
-			}
-		}
-
-		repr += ">"
-	}
-
-	for _, child := range this.Children {
-		repr += child.ToHtml()
-	}
-
-	if this.Type == NODE_TYPE_ELEMENT && !isVoidTag(this.Value) {
-		repr += "</" + this.Value + ">"
-	}
-
-	return repr
-}
-
-func (this *Node) String() string {
-	return this.StringDepth(0)
-}
-
-func (this *Node) StringDepth(depth int) string {
-	repr := ""
-	for i := 0; i < depth + 4; i++ {
-		repr += " "
-	}
-
-	repr += fmt.Sprintln("{Type:", this.Type, "Value:", strconv.Quote(this.Value), "Attributes", this.Attributes, "}")
-
-	for _, child := range this.Children {
-		repr += child.StringDepth(depth + 4)
-	}
-
-	return repr
-}
-
-func (this *Parser) Parse() {
 	this.Next()
 
 	root := Node {
 		Type: NODE_TYPE_ROOT,
 	}
 
+	for ; this.current.Type == TOKEN_TYPE_COMMENT; this.Next() {
+		root.AppendChild(&Node {
+			Type: NODE_TYPE_COMMENT,
+			Value: this.current.Value,
+		})
+	}
+
 	if this.current.Type == TOKEN_TYPE_DECLARATION {
-		root.AddChild(&Node {
+		root.AppendChild(&Node {
 			Type: NODE_TYPE_DECLARATION,
 			Value: strings.ToLower(this.current.Value),
 		})
@@ -274,9 +216,10 @@ func (this *Parser) Parse() {
 
 	for ; this.current.Type != TOKEN_TYPE_EOF; this.Next() {
 		element := this.parseElement()
-		root.AddChild(element)
+		root.AppendChild(element)
 	}
 
-	fmt.Println(root.String())
-	fmt.Println(root.ToHtml())
+	this.Root = &root
+
+	return this.Root
 }

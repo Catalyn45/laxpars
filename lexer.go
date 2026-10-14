@@ -37,6 +37,7 @@ type Token struct {
 	Type  string
 	Value string
 }
+
 func (this *Token) String() string {
     return fmt.Sprintf("Token(%s, %s)", this.Type, this.Value)
 }
